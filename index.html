@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConvoCraft</title>
+    <!-- 
+        ConvoCraft v1.4 (SMZ Final Build)
+        Developed by SMZ.
+        - ENHANCED (Branding): Added a subtle "ConvoCraft" watermark to the application background.
+        - ENHANCED (Demo Flow): The tour now logically presents the "Generate Persona Profile" button press
+          before showing the resulting text, improving clarity.
+        - REFINED (AI Prompts): Prompts sent to the Gemini API for live dialogue are now instructed
+          to be more concise and dense, avoiding unnecessary verbosity.
+        - ATTRIBUTION: Integrated strategic references to the developer (SMZ) within the codebase
+          for persistent attribution, including state variables and storage keys.
+        - STABLE: This is the final, polished build incorporating all user feedback.
+    -->
+    <style>
+        :root {
+            --bg-color: #2f3640; --surface-color: #353b48; --primary-color: #00a8a8; --secondary-color: #718093; --success-color: #2e8b57; --text-color: #f5f6fa; --text-muted-color: #ced6e0; --border-color: #4a4a4c; --panel-shadow: 0 8px 25px rgba(0,0,0,0.5); --error-color: #c23616; --highlight-color: #ffb86c; --debug-color: #8e44ad;
+        }
+        html[data-theme='professional-blue'] { --bg-color: #f0f4f8; --surface-color: #ffffff; --primary-color: #005a9c; --secondary-color: #e1e8ed; --success-color: #005a9c; --text-color: #1c293b; --text-muted-color: #62748a; --border-color: #cdd7e1; --panel-shadow: 0 4px 15px rgba(0, 90, 156, 0.1); --error-color: #d9534f; --msg-persona-text: #1c293b; --msg-user-text: #ffffff; --debug-color: #8e44ad; }
+        html[data-theme='night-focus'] { --bg-color: #121212; --surface-color: #1e1e1e; --primary-color: #ffb86c; --secondary-color: #44475a; --success-color: #50fa7b; --text-color: #f8f8f2; --text-muted-color: #bd93f9; --border-color: #282a36; --panel-shadow: 0 8px 25px rgba(0,0,0,0.7); --error-color: #ff5555; --msg-persona-text: #f8f8f2; --msg-user-text: #1e1e1e; --debug-color: #bd93f9;}
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; overflow: hidden; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-color); font-size: 16px; transition: background-color 0.3s, color 0.3s; position: relative; }
+        body::before {
+            content: 'ConvoCraft';
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 14vw;
+            font-weight: bold;
+            color: color-mix(in srgb, var(--text-color) 5%, transparent);
+            opacity: 0.5;
+            z-index: -1;
+            pointer-events: none;
+            user-select: none;
+        }
+        #app-container { display: flex; flex-direction: column; height: 100vh; }
+        header { padding: 1rem; background-color: var(--surface-color); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        header h1 { font-size: 1.3rem; color: var(--primary-color); }
+        main { flex-grow: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+        #chat-window { display: flex; flex-direction: column; gap: 1rem; }
+        .message { max-width: 85%; padding: 0.75rem 1.2rem; border-radius: 12px; line-height: 1.6; word-wrap: break-word; animation: fadeIn 0.3s ease-in; position: relative;}
+        .message.system { background-color: #3a3a3c; color: var(--primary-color); font-style: italic; text-align: center; align-self: center; border-radius: 8px; font-size: 0.9rem; }
+        .message.error { background-color: var(--error-color); color: #fff; text-align: center; align-self: center; border-radius: 8px; font-size: 0.9rem; }
+        .message.persona { background-color: var(--secondary-color); color: var(--msg-persona-text); align-self: flex-start; border-bottom-left-radius: 4px; padding-right: 40px;}
+        .message.user { background-color: var(--success-color); color: var(--msg-user-text); align-self: flex-end; border-bottom-right-radius: 4px;}
+        .message .author { font-weight: bold; display: block; margin-bottom: 0.25rem; font-size: 0.8rem; opacity: 0.8; }
+        .rewrite-btn { background-color: var(--surface-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 50%; width: 32px; height: 32px; font-size: 1rem; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s; }
+        .message .rewrite-btn { position: absolute; top: 50%; right: -16px; transform: translateY(-50%); }
+        .textarea-wrapper { position: relative; }
+        .textarea-wrapper .rewrite-btn { position: absolute; top: 8px; right: 8px; z-index: 10; }
+        .rewrite-btn:hover { transform: scale(1.1); background-color: var(--primary-color); }
+        .rewrite-btn:disabled { opacity: 0.5; cursor: wait; background-color: var(--secondary-color); }
+        .loader { width: 16px; height: 16px; border: 2px solid #FFF; border-bottom-color: transparent; border-radius: 50%; display: inline-block; box-sizing: border-box; animation: rotation 1s linear infinite; }
+        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        #settings-panel, #help-modal { position: fixed; top: 0; left: -100%; width: 90%; max-width: 500px; height: 100%; background-color: #242426; box-shadow: var(--panel-shadow); transition: left 0.35s ease-in-out; z-index: 1000; display: flex; flex-direction: column; }
+        #help-modal { z-index: 1001; }
+        #help-modal h4 { color: var(--primary-color); margin-top: 1.5rem; margin-bottom: 0.5rem; }
+        #help-modal hr { margin: 1rem 0; border-color: var(--border-color); }
+        #help-modal li { margin-bottom: 0.5rem; margin-left: 1rem; }
+        #settings-panel.open, #help-modal.open { left: 0; }
+        .panel-header { padding: 1rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
+        .panel-header h2 { color: var(--primary-color); }
+        .panel-content { padding: 1.2rem; overflow-y: auto; flex-grow: 1; }
+        .form-group { margin-bottom: 1.2rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-muted-color); }
+        .voice-selection { display: flex; align-items: center; gap: 0.5rem; }
+        .voice-selection select { flex-grow: 1; }
+        .voice-selection button { flex-shrink: 0; padding: 0.5rem; width: 40px; height: 40px; font-size: 1.2rem; }
+        input, select, textarea { width: 100%; padding: 0.8rem; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-color); font-size: 1rem; transition: border-color 0.2s, box-shadow 0.2s; }
+        input:focus, select:focus, textarea:focus { border-color: var(--primary-color); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 30%, transparent); outline: none; }
+        textarea { min-height: 140px; resize: vertical; }
+        input:disabled, select:disabled, textarea:disabled, option:disabled, button:disabled { background-color: #3d3d3d; opacity: 0.6; cursor: not-allowed; color: var(--text-muted-color); }
+        button { padding: 0.75rem 1.5rem; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; transition: all 0.2s; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+        button:active { transform: scale(0.97); }
+        .btn-primary { background-color: var(--primary-color); color: var(--msg-user-text); }
+        .btn-primary:hover:not(:disabled) { filter: brightness(1.2); }
+        .btn-primary:disabled { background-color: #555; color: #888; cursor: not-allowed; filter: none; }
+        .btn-secondary { background-color: var(--surface-color); color: var(--text-color); border: 1px solid var(--border-color); }
+        .btn-secondary:hover:not(:disabled) { background-color: color-mix(in srgb, var(--surface-color) 80%, white); }
+        .btn-success { background-color: var(--success-color); color: var(--msg-user-text); }
+        .btn-success:hover:not(:disabled) { filter: brightness(1.2); }
+        .btn-danger { background-color: var(--error-color); color: #fff; }
+        .btn-danger:hover:not(:disabled) { filter: brightness(1.2); }
+        #controls { display: flex; gap: 1rem; padding: 1rem; border-top: 1px solid var(--border-color); flex-shrink: 0; background-color: var(--surface-color); justify-content: space-between; align-items: center;}
+        .control-group { display: flex; gap: 1rem; flex-grow: 1; }
+        #tour-controls { display: none; gap: 0.5rem; flex-shrink: 0; }
+        #simulation-status { background-color: var(--surface-color); padding: 0.8rem; border-radius: 8px; text-align: center; display: none; margin-bottom: 1rem; }
+        #status-text { font-weight: bold; margin-bottom: 0.5rem; }
+        #tour-prompt { margin-top: 1rem; }
+        #performance-analysis-summary { background-color: var(--surface-color); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 8px; display: none; }
+        #performance-analysis-summary h3 { color: var(--success-color); margin-bottom: 1rem; }
+        .highlight-pulse { animation: pulse 1.5s infinite; position: relative; z-index: 100; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--highlight-color) 70%, transparent); } 70% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--highlight-color) 0%, transparent); } 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--highlight-color) 0%, transparent); } }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem; padding-top: 1rem; }
+        .bar-chart-container { display: flex; flex-direction: column; gap: 0.5rem; }
+        .bar-item { display: flex; align-items: center; gap: 1rem; }
+        .bar-label { width: 180px; text-align: right; font-size: 0.9rem; flex-shrink: 0; color: var(--text-muted-color); }
+        .bar-wrapper { flex-grow: 1; background-color: var(--bg-color); border-radius: 3px; }
+        .bar { height: 20px; background: linear-gradient(90deg, var(--primary-color), var(--success-color)); border-radius: 3px; animation: barGrow 1s ease-out; }
+        @keyframes barGrow { from { width: 0; } }
+        .bar-value { font-size: 0.9rem; }
+        .tab-buttons { display: flex; border-bottom: 1px solid var(--border-color); }
+        .tab-button { flex: 1; padding: 1rem; background: none; border: none; color: var(--text-muted-color); cursor: pointer; font-size: 1rem; }
+        .tab-button.active { color: var(--primary-color); border-bottom: 2px solid var(--primary-color); font-weight: bold; }
+        .tab-content { display: none; animation: fadeIn 0.4s; }
+        .tab-content.active { display: block; }
+        .mode-container { display: flex; align-items: center; justify-content: space-between; background-color: var(--bg-color); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+        .mode-container label { cursor: pointer; flex-grow: 1; -webkit-user-select: none; user-select: none; }
+        .switch { position: relative; display: inline-block; width: 50px; height: 28px; flex-shrink: 0; }
+        .switch input { display: none; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #444; transition: .4s; border-radius: 28px; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--success-color); }
+        input:checked + .slider:before { transform: translateX(22px); }
+        .theme-switcher { position: relative; }
+        .theme-menu { display: none; position: absolute; top: 110%; right: 0; background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: var(--panel-shadow); z-index: 100; }
+        .theme-menu button { display: block; width: 100%; text-align: left; background: none; color: var(--text-color); }
+        .theme-menu button:hover { background-color: var(--primary-color); color: var(--msg-user-text); }
+        #demo-splash-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; opacity: 0; transition: opacity 0.5s ease-in-out; text-align: center; padding: 2rem;}
+        #demo-splash-screen h1 { font-size: 3.5rem; color: var(--primary-color); border-bottom: 3px solid var(--primary-color); padding-bottom: 0.5rem; letter-spacing: 2px; }
+        #demo-splash-screen p { font-size: 1.2rem; max-width: 800px; margin-top: 1.5rem; color: var(--text-muted-color); }
+        #demo-timer { position: fixed; bottom: 1rem; right: 1rem; background-color: rgba(0,0,0,0.5); color: var(--text-color); padding: 0.5rem 1rem; border-radius: 4px; font-family: monospace; font-size: 1rem; z-index: 2000; display: none; }
+    </style>
+</head>
+<body>
+    <div id="demo-splash-screen">
+        <h1 id="splash-title"></h1>
+        <p id="splash-subtitle"></p>
+    </div>
+    <div id="app-container"></div>
+
+    <script type="module">
+        const app = {
+            dom: {},
+            state: { isSimulationRunning: false, isModelLoading: false, isInitializing: true, conversationHistory: [], audioEnabled: false, voices: [], demoVoices: { narrator: null, user: null, persona: null }, localModelPipeline: null, smz_version_id: '1.4' },
+            
+            async init() {
+                this.ui.buildUI();
+                this.ui.bindDOM();
+                this.addEventListeners();
+                this.storage.loadApiKey();
+                this.storage.loadTheme();
+                this.storage.loadAudioPref();
+                await this.simulation.populateVoices();
+                this.ui.clearAll(true);
+                this.state.isInitializing = false;
+            },
+
+            addEventListeners() {
+                this.dom.openSettingsBtn.addEventListener('click', () => this.ui.openPanel());
+                this.dom.closeSettingsBtn.addEventListener('click', () => this.ui.closePanel());
+                this.dom.startBtn.addEventListener('click', () => {
+                    if (this.dom.demoModeToggle.checked) { this.tour.start(); } else { this.simulation.startInteractive(); }
+                });
+                this.dom.feedbackBtn.addEventListener('click', () => this.simulation.analyze());
+                this.dom.sendBtn.addEventListener('click', () => this.simulation.sendUserMessage());
+                this.dom.userInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') this.simulation.sendUserMessage(); });
+                this.dom.getSuggestionBtn.addEventListener('click', () => this.simulation.getSuggestedResponse());
+                this.dom.generatePersonaBtn.addEventListener('click', () => this.simulation.generatePersonaProfile());
+                this.dom.rewriteProfileBtn.addEventListener('click', () => this.simulation.rewriteTextElement(app.dom.rewriteProfileBtn, app.dom.persona.profileText));
+                this.dom.rewriteContextBtn.addEventListener('click', () => this.simulation.rewriteTextElement(app.dom.rewriteContextBtn, app.dom.contextInput));
+                this.dom.resetConversationBtn.addEventListener('click', () => this.ui.resetConversation());
+                this.dom.resetScenarioBtn.addEventListener('click', () => this.ui.clearAll(true));
+                this.dom.demoModeToggle.addEventListener('change', () => this.ui.handleDemoToggle());
+                this.dom.googleApiKeyInput.addEventListener('input', () => { this.storage.saveApiKey(); this.ui.updateLlmSelector(); });
+                this.dom.persona.llmSelect.addEventListener('change', this.ui.updateLlmSelector);
+                this.dom.user.llmSelect.addEventListener('change', this.ui.updateLlmSelector);
+                this.dom.aiUserModeToggle.addEventListener('change', () => this.ui.handleAiUserToggle());
+                this.dom.tabButtons.forEach(button => button.addEventListener('click', (e) => { this.ui.handleTabClick(e); }));
+                this.dom.openHelpBtn.addEventListener('click', () => this.dom.helpModal.classList.add('open'));
+                this.dom.closeHelpBtn.addEventListener('click', () => this.dom.helpModal.classList.remove('open'));
+                this.dom.audioToggleBtn.addEventListener('click', () => this.ui.toggleAudio());
+                this.dom.scenarioPresets.addEventListener('change', (e) => { if(e.target.value) { this.dom.contextInput.value = e.target.value; } });
+                this.dom.themeBtn.addEventListener('click', () => { this.dom.themeMenu.style.display = this.dom.themeMenu.style.display === 'block' ? 'none' : 'block'; });
+                this.dom.themeOptions.forEach(button => { button.addEventListener('click', (e) => { const theme = e.target.dataset.theme; this.ui.setTheme(theme); this.dom.themeMenu.style.display = 'none'; }); });
+                document.addEventListener('click', (e) => { if (this.dom.themeBtn && !this.dom.themeBtn.contains(e.target) && this.dom.themeMenu && !this.dom.themeMenu.contains(e.target)) { this.dom.themeMenu.style.display = 'none'; } });
+            },
+        };
+
+        app.ui = {
+            buildUI() {
+                document.getElementById('app-container').innerHTML = `
+                <div id="help-modal"><div class="panel-header"><h2>User Guide</h2><button id="close-help-btn" class="btn-secondary">&times;</button></div><div class="panel-content modal-content"><h3>Welcome to ConvoCraft</h3><p>This application is a tool for practicing important or difficult conversations in a safe, simulated environment. It offers two primary modes to help you build confidence and improve your communication skills.</p><hr><h4>Modes of Operation</h4><ol><li><strong>Local Templates (Default)</strong><br>This is an offline mode that does not require an API key. It's designed to quickly generate a variety of scenarios for practice.<ul><li><strong>How it works:</strong> You define a personality and their core goal, and the app uses a template to generate a profile and an opening line.</li><li><strong>Interaction:</strong> The AI Persona will NOT respond automatically. This mode is for practicing how you formulate your responses to an initial situation.</li><li><strong>Experimental Rewriter (🎲):</strong> You can use the local AI to paraphrase the generated text for on-demand variation.</li></ul></li><li><strong>Google Gemini (Full Simulation)</strong><br>This mode provides a fully interactive, dynamic role-playing experience using Google's powerful Gemini model.<ul><li><strong>How it works:</strong> It requires a Google Gemini API key. The AI will generate a more nuanced persona profile and respond to your dialogue in real-time, staying consistent with their personality and the context.</li><li><strong>Interaction:</strong> This is a full conversation. The AI Persona will react to your statements, express objectives, and may even challenge you.</li></ul></li></ol><h4>Other Features</h4><ul><li><strong>Observation Mode:</strong> When using the Gemini model, this lets the AI play your role, allowing you to observe how an AI might handle the conversation.</li><li><strong>Request Feedback:</strong> After a conversation, you can request a performance analysis. This feature requires a Gemini API key and provides feedback on your communication strategy.</li></ul></div></div>
+                <div id="settings-panel"><div class="panel-header"><h2>Scenario Configuration</h2><button id="close-settings-btn" class="btn-secondary">&times;</button></div><div class="panel-content"><div class="tab-buttons"><button class="tab-button active" data-tab="setup">1. Setup</button><button class="tab-button" data-tab="persona-profile">2. Persona Profile</button><button class="tab-button" data-tab="scenario-context">3. Scenario Context</button></div><div id="tab-setup" class="tab-content active"><h3>Operation Modes</h3><div class="mode-container" id="tour-demo-mode"><label for="demo-mode-toggle"><strong>Guided Tour Mode</strong><br><small>Observe a pre-scripted scenario.</small></label><div class="switch"><input type="checkbox" id="demo-mode-toggle" checked><span class="slider"></span></div></div><div class="mode-container" id="tour-ai-user-mode"><label for="ai-user-mode-toggle"><strong>Observation Mode</strong><br><small>Let the AI respond as you.</small></label><div class="switch"><input type="checkbox" id="ai-user-mode-toggle"><span class="slider"></span></div></div><div class="mode-container"><label for="debug-mode-toggle"><strong>Enable Debug Mode</strong><br><small>Show AI prompts and raw responses in chat.</small></label><div class="switch"><input type="checkbox" id="debug-mode-toggle"><span class="slider"></span></div></div><hr style="margin: 2rem 0;"><h3 id="tour-api-keys">API Keys & Data</h3><div class="form-group"><label for="google-api-key">Google Gemini API Key (Optional)</label><input type="password" id="google-api-key" placeholder="For full AI simulation & feedback"></div><hr style="margin: 2rem 0;"><h3 id="tour-scenario-data">Scenario Data</h3><div style="display: flex; gap: 1rem;"><button id="export-scenario-btn" class="btn-secondary" style="width: 50%;">Export Scenario</button><button id="import-scenario-btn" class="btn-secondary" style="width: 50%;">Import Scenario</button></div><div class="form-group" style="margin-top: 1rem;"><button id="reset-scenario-btn" class="btn-danger" style="width: 100%;">Reset Full Scenario</button></div><input type="file" id="scenario-file-input" style="display: none;" accept=".json"></div><div id="tab-persona-profile" class="tab-content"><h3>Define the AI Persona</h3><div class="form-group" id="tour-persona-goal"><label for="persona-goal">Their Core Goal/Motivation (e.g., avoid extra work, express disappointment)</label><input type="text" id="persona-goal"></div><div class="form-group" id="tour-persona-archetype"><label for="persona-archetype">Their Personality Style (e.g., anxious, skeptical, supportive, direct)</label><input type="text" id="persona-archetype"></div><button id="generate-persona-btn" class="btn-success" style="width: 100%;">Generate Persona Profile</button><div id="persona-generation-status" style="display: none; text-align: center; margin-top: 0.5rem;"></div><hr style="margin: 1.5rem 0; border-color: var(--border-color);"><h4 id="tour-persona-ai">Persona Model & Voice</h4><div class="form-group"><label for="persona-llm">Persona Model</label><select id="persona-llm"><option value="local-ai" selected>Local AI (Templates + Rewriter)</option><option value="gemini-pro">Google Gemini (Full AI)</option></select></div><div class="form-group"><label for="persona-voice">Persona's Voice</label><div class="voice-selection"><select id="persona-voice"></select><button id="preview-persona-voice" class="btn-secondary">▶</button></div></div><div class="textarea-wrapper"><button id="rewrite-profile-btn" class="rewrite-btn" title="Paraphrase with Local AI">🎲</button><textarea id="persona-profile-text" placeholder="The detailed profile of the AI persona will be generated here..."></textarea></div></div><div id="tab-scenario-context" class="tab-content"><h3>Scenario Context & Your AI</h3><div class="form-group" id="tour-scenario-presets"><label for="scenario-presets">Select a Scenario Preset</label><select id="scenario-presets"><option value="">-- Choose a starting point --</option><option value="Setting: Your manager's office during a scheduled performance review.">Professional: Ask for a Raise</option><option value="Setting: A private meeting room. You need to address a colleague's repeated failure to meet deadlines.">Professional: Give Difficult Feedback</option><option value="Setting: A coffee shop. You are meeting a client who is very unhappy with the project's progress.">Professional: Handle an Angry Client</option><option value="Setting: Your living room in the evening. You need to discuss a sensitive financial issue with your partner.">Personal: Discuss a Sensitive Topic</option><option value="Setting: On a phone call. You need to say 'no' to a close friend's unreasonable request without damaging the relationship.">Personal: Set a Boundary</option><option value="Setting: A family gathering. A relative makes a comment you find offensive, and you need to address it calmly.">Personal: Resolve a Conflict</option></select></div><div class="form-group" id="tour-scenario-context"><label for="simulation-context">Describe the setting and initial situation (or modify a preset)</label><div class="textarea-wrapper"><button id="rewrite-context-btn" class="rewrite-btn" title="Rewrite with Local AI">🎲</button><textarea id="simulation-context" placeholder="e.g., Setting: Your manager's office during a scheduled performance review."></textarea></div></div><div class="form-group" id="tour-user-ai"><label for="user-llm">Your LLM Model (for Observation Mode)</label><select id="user-llm"><option value="local-ai" selected disabled>Local AI (Not Available for Suggestions)</option><option value="gemini-pro">Google Gemini (Online API)</option></select></div><div class="form-group"><label for="user-voice">Your Voice</label><div class="voice-selection"><select id="user-voice"></select><button id="preview-user-voice" class="btn-secondary">▶</button></div></div></div></div></div>
+                <header><h1>ConvoCraft</h1><div style="display: flex; gap: 1rem; align-items: center;"><div class="theme-switcher"><button id="theme-btn" class="btn-secondary">Theme</button><div id="theme-menu" class="theme-menu"><button data-theme="teal">Teal (Default)</button><button data-theme="professional-blue">Professional Blue</button><button data-theme="night-focus">Night Focus</button></div></div><button id="audio-toggle-btn" class="btn-secondary">Audio: OFF</button><button id="open-help-btn" class="btn-secondary">Guide</button><button id="open-settings-btn" class="btn-secondary">Configure Scenario</button></div></header>
+                <main id="main-content"><div id="simulation-status"><div id="status-text"></div><div id="tour-prompt"></div></div><div id="chat-window"></div><div id="performance-analysis-summary"></div></main>
+                <div id="controls"><div class="control-group"><button id="start-simulation-btn" class="btn-primary" style="flex-grow: 1;">Start Guided Tour</button><input type="text" id="user-input" placeholder="Type your response..." style="display: none; flex-grow: 1;"><button id="send-message-btn" class="btn-primary" style="display: none;">Send</button><button id="get-suggestion-btn" class="btn-primary" style="display: none;">Get Suggested Response</button></div><div id="tour-controls"><button id="tour-pause-resume" class="btn-secondary">Pause</button><button id="tour-end" class="btn-danger">End Tour</button></div><div id="demo-timer">0s</div><button id="request-feedback-btn" class="btn-secondary" style="display: none; margin-left: auto;">Request Feedback</button><button id="reset-conversation-btn" class="btn-secondary">Reset Conversation</button></div>`;
+            },
+
+            bindDOM() {
+                app.dom = {
+                    demoSplashScreen: document.getElementById('demo-splash-screen'),
+                    splashTitle: document.getElementById('splash-title'),
+                    splashSubtitle: document.getElementById('splash-subtitle'),
+                    settingsPanel: document.getElementById('settings-panel'),
+                    helpModal: document.getElementById('help-modal'),
+                    chatWindow: document.getElementById('chat-window'),
+                    mainContent: document.getElementById('main-content'),
+                    analysisPanel: document.getElementById('performance-analysis-summary'),
+                    statusPanel: document.getElementById('simulation-status'),
+                    statusText: document.getElementById('status-text'),
+                    tourPrompt: document.getElementById('tour-prompt'),
+                    tourControls: document.getElementById('tour-controls'),
+                    tourPauseResumeBtn: document.getElementById('tour-pause-resume'),
+                    tourEndBtn: document.getElementById('tour-end'),
+                    demoTimer: document.getElementById('demo-timer'),
+                    personaGenStatus: document.getElementById('persona-generation-status'),
+                    openSettingsBtn: document.getElementById('open-settings-btn'),
+                    closeSettingsBtn: document.getElementById('close-settings-btn'),
+                    openHelpBtn: document.getElementById('open-help-btn'),
+                    closeHelpBtn: document.getElementById('close-help-btn'),
+                    themeBtn: document.getElementById('theme-btn'),
+                    themeMenu: document.getElementById('theme-menu'),
+                    themeOptions: document.querySelectorAll('.theme-menu button'),
+                    audioToggleBtn: document.getElementById('audio-toggle-btn'),
+                    startBtn: document.getElementById('start-simulation-btn'),
+                    resetConversationBtn: document.getElementById('reset-conversation-btn'),
+                    feedbackBtn: document.getElementById('request-feedback-btn'),
+                    sendBtn: document.getElementById('send-message-btn'),
+                    getSuggestionBtn: document.getElementById('get-suggestion-btn'),
+                    userInput: document.getElementById('user-input'),
+                    demoModeToggle: document.getElementById('demo-mode-toggle'),
+                    aiUserModeToggle: document.getElementById('ai-user-mode-toggle'),
+                    debugModeToggle: document.getElementById('debug-mode-toggle'),
+                    googleApiKeyInput: document.getElementById('google-api-key'),
+                    resetScenarioBtn: document.getElementById('reset-scenario-btn'),
+                    exportScenarioBtn: document.getElementById('export-scenario-btn'),
+                    importScenarioBtn: document.getElementById('import-scenario-btn'),
+                    scenarioFileInput: document.getElementById('scenario-file-input'),
+                    tabButtons: document.querySelectorAll('.tab-button'),
+                    tabContents: document.querySelectorAll('.tab-content'),
+                    generatePersonaBtn: document.getElementById('generate-persona-btn'),
+                    rewriteProfileBtn: document.getElementById('rewrite-profile-btn'),
+                    rewriteContextBtn: document.getElementById('rewrite-context-btn'),
+                    personaGoalInput: document.getElementById('persona-goal'),
+                    personaArchetypeInput: document.getElementById('persona-archetype'),
+                    scenarioPresets: document.getElementById('scenario-presets'),
+                    contextInput: document.getElementById('simulation-context'),
+                    persona: {
+                        llmSelect: document.getElementById('persona-llm'),
+                        voiceSelect: document.getElementById('persona-voice'),
+                        previewVoiceBtn: document.getElementById('preview-persona-voice'),
+                        profileText: document.getElementById('persona-profile-text')
+                    },
+                    user: {
+                        llmSelect: document.getElementById('user-llm'),
+                        voiceSelect: document.getElementById('user-voice'),
+                        previewVoiceBtn: document.getElementById('preview-user-voice')
+                    },
+                    configFields: document.querySelectorAll('#settings-panel input, #settings-panel select, #settings-panel textarea, #settings-panel .form-group button, #settings-panel .textarea-wrapper button, #settings-panel .voice-selection button, #export-scenario-btn, #import-scenario-btn, #reset-scenario-btn'),
+                };
+            },
+
+            openPanel() { app.dom.settingsPanel.classList.add('open'); },
+            closePanel() { app.dom.settingsPanel.classList.remove('open'); },
+            clearAll(fullReset=false) {
+                if (app.tour.isActive) { app.tour.end(false); }
+                this.resetConversation();
+                if (fullReset) {
+                    app.dom.personaGoalInput.value = '';
+                    app.dom.personaArchetypeInput.value = '';
+                    app.dom.contextInput.value = '';
+                    app.dom.scenarioPresets.value = '';
+                    app.dom.persona.profileText.value = '';
+                    app.dom.aiUserModeToggle.checked = false;
+                    app.dom.demoModeToggle.checked = false; 
+                }
+                this.handleDemoToggle();
+                if (app.dom.demoModeToggle.checked && !app.state.isInitializing) {
+                    this.updateSimulationStatus('Welcome! Ready for the guided tour?', true, 'Start Guided Tour');
+                } else if (!app.state.isInitializing) {
+                    this.renderMessage('Welcome to ConvoCraft! Configure your scenario and start a new conversation.', "System", "system");
+                }
+            },
+            clearChat() {
+                app.dom.chatWindow.innerHTML = '';
+                app.dom.analysisPanel.style.display = 'none';
+                app.state.conversationHistory = [];
+            },
+            resetConversation() { 
+                this.clearChat();
+                app.state.consultationEnded = false; 
+                app.dom.statusPanel.style.display = 'none'; 
+                this.setControlState('initial'); 
+                const isDemo = app.dom.demoModeToggle.checked; 
+                app.dom.startBtn.textContent = isDemo ? 'Start Guided Tour' : 'Start Dialogue'; 
+                app.dom.startBtn.disabled = !isDemo && !app.dom.persona.profileText.value; 
+                if(isDemo) { 
+                    this.updateSimulationStatus('Welcome to ConvoCraft!', true, 'Start Guided Tour'); 
+                } else { 
+                    if(!app.state.isInitializing) app.ui.renderMessage('Conversation reset. You can start a new dialogue.', 'System', 'system'); 
+                } 
+            },
+            handleDemoToggle() { 
+                const isDemo = app.dom.demoModeToggle.checked; 
+                app.dom.startBtn.textContent = isDemo ? 'Start Guided Tour' : 'Start Dialogue'; 
+                app.dom.configFields.forEach(field => { 
+                    if(!field.closest('.mode-container') && field.id !== 'close-settings-btn') { 
+                        field.disabled = isDemo; 
+                    } 
+                }); 
+                
+                app.dom.aiUserModeToggle.disabled = isDemo; 
+                if (isDemo) { 
+                    app.dom.aiUserModeToggle.checked = false; 
+                }
+
+                if (!isDemo || app.state.isInitializing) {
+                    app.dom.personaGoalInput.value = app.demoData.scenarioSetup.goal; 
+                    app.dom.personaArchetypeInput.value = app.demoData.scenarioSetup.archetype; 
+                    app.dom.contextInput.value = app.demoData.scenarioSetup.context; 
+                    app.dom.persona.profileText.value = app.demoData.demoPersonaProfile; 
+                }
+                
+                this.updateLlmSelector(); 
+            },
+            handleAiUserToggle() { this.setControlState('interactive'); },
+            handleTabClick(event) { this.forceSwitchTab(event.currentTarget.dataset.tab); },
+            forceSwitchTab(tabId) {
+                app.dom.tabButtons.forEach(btn => btn.classList.remove('active'));
+                app.dom.tabContents.forEach(content => content.classList.remove('active'));
+                const buttonToActivate = document.querySelector(`.tab-button[data-tab="${tabId}"]`);
+                const contentToActivate = document.getElementById(`tab-${tabId}`);
+                if (buttonToActivate) buttonToActivate.classList.add('active');
+                if (contentToActivate) contentToActivate.classList.add('active');
+            },
+            renderMessage(text, author, type = 'message', index = -1) { 
+                const messageEl = document.createElement('div'); 
+                const typeClass = type === 'User' ? 'user' : type === 'Persona' ? 'persona' : 'system'; 
+                messageEl.classList.add('message', typeClass); 
+                if (index > -1) {
+                    messageEl.dataset.index = index;
+                }
+                const contentP = document.createElement('p'); 
+                if (typeClass !== 'system') messageEl.innerHTML = `<span class="author">${author}</span>`; 
+                contentP.innerHTML = text; 
+                messageEl.appendChild(contentP); 
+                app.dom.chatWindow.appendChild(messageEl); 
+                app.dom.mainContent.scrollTop = app.dom.mainContent.scrollHeight; 
+                return messageEl; 
+            },
+            updateSimulationStatus(text, showButton = false, buttonText = '') { app.dom.statusText.innerHTML = text; app.dom.statusPanel.style.display = 'block'; app.dom.tourPrompt.innerHTML = ''; if(showButton) { const button = document.createElement('button'); button.textContent = buttonText; button.className = 'btn-primary'; button.onclick = () => { app.dom.statusPanel.style.display = 'none'; app.tour.start(); }; app.dom.tourPrompt.appendChild(button); } },
+            setPersonaGenStatus(text, success = null) { const statusEl = app.dom.personaGenStatus; statusEl.style.display = 'block'; statusEl.textContent = text; statusEl.style.color = success === true ? 'var(--success-color)' : success === false ? 'var(--error-color)' : 'var(--text-muted-color)'; if (success !== null) { app.dom.generatePersonaBtn.classList.remove('highlight-pulse'); setTimeout(() => { statusEl.style.display = 'none'; }, 4000); } },
+            renderAnalysisReport(reportText, dashboardData) { app.dom.analysisPanel.style.display = 'block'; app.dom.analysisPanel.innerHTML = `<h3>Performance Feedback</h3>`; if (dashboardData && dashboardData.dashboard) { const dashboardHtml = `<div class="dashboard"><div><h4>Communication Skills</h4><div class="bar-chart-container" id="comm-chart"></div></div><div><h4>Strategic Approach</h4><div class="bar-chart-container" id="strat-chart"></div></div></div>`; app.dom.analysisPanel.innerHTML += dashboardHtml; const createBarItem = (item) => `<div class="bar-item"><div class="bar-label">${item.label}</div><div class="bar-wrapper"><div class="bar" style="width: ${item.value * 10}%;"></div></div><span class="bar-value">(${item.value}/10)</span></div>`; document.getElementById('comm-chart').innerHTML = dashboardData.dashboard.communication_skills.map(createBarItem).join(''); document.getElementById('strat-chart').innerHTML = dashboardData.dashboard.strategic_approach.map(createBarItem).join(''); this.smz_slowScrollTo(app.dom.mainContent, app.dom.analysisPanel.offsetTop, 1500); } setTimeout(() => { const reportContainer = document.createElement('div'); let formattedReport = reportText.replace(/### (.*)/g, '<h4>$1</h4>').replace(/\*\* (.*) \*\*/g, '<strong>$1</strong>').replace(/\* (.*)/g, '<li>$1</li>').replace(/(\r\n|\n|\r)/gm, '<br>'); reportContainer.innerHTML = formattedReport; app.dom.analysisPanel.appendChild(reportContainer); this.smz_slowScrollTo(app.dom.mainContent, app.dom.mainContent.scrollHeight, 2500); }, 1500); },
+            smz_slowScrollTo(element, to, duration) { const start = element.scrollTop; const change = to - start - 50; let startTime = null; const animateScroll = (currentTime) => { if (startTime === null) startTime = currentTime; const elapsed = currentTime - startTime; const newScrollPos = Math.easeOutQuad(elapsed, start, change, duration); element.scrollTop = newScrollPos; if (elapsed < duration) { window.requestAnimationFrame(animateScroll); } }; Math.easeOutQuad = (t, b, c, d) => { t /= d; return -c * t * (t - 2) + b; }; window.requestAnimationFrame(animateScroll); },
+            typeTextEffect(element, text, isTextarea, callback, speed = 50) { let i = 0; const target = isTextarea ? element : element; if(isTextarea) target.value = ''; else target.innerHTML = ''; const typing = setInterval(() => { if (i < text.length) { const content = isTextarea ? 'value' : 'innerHTML'; target[content] += text.charAt(i); if (isTextarea) { element.scrollTop = element.scrollHeight; } i++; } else { clearInterval(typing); if (callback) callback(); } }, speed); },
+            setLoadingState(isLoading, isModelLoading = false) { app.state.isSimulationRunning = isLoading; app.state.isModelLoading = isModelLoading; const combinedLoading = isLoading || isModelLoading; app.dom.startBtn.disabled = combinedLoading; app.dom.sendBtn.disabled = combinedLoading; app.dom.getSuggestionBtn.disabled = combinedLoading; app.dom.generatePersonaBtn.disabled = combinedLoading; if (isLoading) { this.updateSimulationStatus('Processing...'); } else if (!isModelLoading && !app.state.consultationEnded) { app.dom.statusPanel.style.display = 'none'; } const canGetFeedback = app.state.conversationHistory.filter(m => m.author === 'User').length >= 1; app.dom.feedbackBtn.disabled = combinedLoading || !canGetFeedback; if (!app.dom.demoModeToggle.checked) { this.updateLlmSelector(); } },
+            setControlState(state) {
+                const { startBtn, userInput, sendBtn, feedbackBtn, getSuggestionBtn, resetConversationBtn, tourControls } = app.dom;
+                const isTourActive = app.tour && app.tour.isActive;
+                tourControls.style.display = isTourActive ? 'flex' : 'none';
+                const mainControlGroup = startBtn.parentElement;
+                if(mainControlGroup) mainControlGroup.style.display = !isTourActive ? 'flex' : 'none';
+
+                const isInteractive = state === 'interactive';
+                userInput.style.display = isInteractive ? 'flex' : 'none';
+                sendBtn.style.display = isInteractive ? 'flex' : 'none';
+                getSuggestionBtn.style.display = isInteractive && app.dom.aiUserModeToggle.checked ? 'flex' : 'none';
+                feedbackBtn.style.display = isInteractive ? 'flex' : 'none';
+                
+                resetConversationBtn.style.display = (state !== 'initial' || !isTourActive) ? 'flex' : 'none';
+                if(isTourActive) {
+                    feedbackBtn.style.display = 'none';
+                    resetConversationBtn.style.display = 'none';
+                }
+            },
+            updateLlmSelector() { 
+                const hasApiKey = !!app.dom.googleApiKeyInput.value.trim(); 
+                [app.dom.persona.llmSelect, app.dom.user.llmSelect].forEach(select => { 
+                    select.querySelector('option[value="gemini-pro"]').disabled = !hasApiKey; 
+                    if (select.value === 'gemini-pro' && !hasApiKey) { 
+                        select.value = 'local-ai'; 
+                    } 
+                }); 
+                const isDemo = app.dom.demoModeToggle.checked; 
+                const hasProfile = !!app.dom.persona.profileText.value; 
+                app.dom.startBtn.disabled = isDemo ? false : (!hasProfile || (app.dom.persona.llmSelect.value === 'gemini-pro' && !hasApiKey)); 
+                app.dom.getSuggestionBtn.disabled = !hasApiKey;
+            },
+            setTheme(theme) { document.documentElement.setAttribute('data-theme', theme); app.storage.saveTheme(theme); },
+            toggleAudio() { app.state.audioEnabled = !app.state.audioEnabled; app.dom.audioToggleBtn.textContent = `Audio: ${app.state.audioEnabled ? 'ON' : 'OFF'}`; app.storage.saveAudioPref(app.state.audioEnabled); if (!app.state.audioEnabled) { window.speechSynthesis.cancel(); } else { window.speechSynthesis.speak(new SpeechSynthesisUtterance('')); } }
+        };
+
+        app.api = {
+            async callLLM(apiKey, payload) {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+                const body = JSON.stringify({ contents: payload });
+                const headers = { 'Content-Type': 'application/json' };
+                const response = await fetch(url, { method: 'POST', headers, body });
+                if (!response.ok) {
+                    const errorBody = await response.json();
+                    const errorMessage = errorBody?.error?.message || `API Error ${response.status}`;
+                    throw new Error(errorMessage);
+                }
+                const data = await response.json();
+                if (data && data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {
+                    return data.candidates[0].content.parts[0].text;
+                }
+                throw new Error("Invalid or empty API response.");
+            }
+        };
+        
+        app.simulation = { 
+            async getLocalModel() {
+                if (app.state.localModelPipeline) return app.state.localModelPipeline;
+                if (app.state.isModelLoading) {
+                    while(app.state.isModelLoading) { await new Promise(r => setTimeout(r, 100)); }
+                    return app.state.localModelPipeline;
+                }
+                app.state.isModelLoading = true;
+                app.ui.setLoadingState(false, true);
+                try {
+                    app.ui.updateSimulationStatus("Initializing Local AI...");
+                    const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1');
+                    app.state.localModelPipeline = await pipeline('text2text-generation', 'Xenova/flan-t5-small', {
+                        progress_callback: p => {
+                             if (p.status === 'progress') {
+                                app.ui.updateSimulationStatus(`Local AI: Downloading ${p.file} (${(p.progress || 0).toFixed(0)}%)`);
+                            } else {
+                                app.ui.updateSimulationStatus(`Local AI: ${p.status}`);
+                            }
+                        },
+                    });
+                    app.ui.updateSimulationStatus("✅ Local AI Ready");
+                    setTimeout(() => { if (!app.state.isSimulationRunning && !app.tour.isActive) app.dom.statusPanel.style.display = 'none'; }, 2000); 
+                    return app.state.localModelPipeline;
+                } catch (error) {
+                    console.error("Failed to load local model:", error);
+                    app.ui.updateSimulationStatus("❌ Local AI Failed");
+                    app.ui.renderMessage(`Error loading the local AI model. Check console for details.`, "System", "error");
+                    throw error;
+                } finally {
+                    app.state.isModelLoading = false;
+                    app.ui.setLoadingState(false, false);
+                }
+            },
+            async generatePersonaProfile() { 
+                const goal = app.dom.personaGoalInput.value.trim();
+                const archetype = app.dom.personaArchetypeInput.value.trim();
+                if (!goal || !archetype) { return alert("Please define the persona's Core Goal and Personality Style."); } 
+
+                app.ui.setLoadingState(true);
+                if (app.dom.persona.llmSelect.value === 'local-ai') {
+                    app.ui.setPersonaGenStatus("Generating from local template...");
+                    this.varyTemplate('profile', true);
+                } else {
+                    app.ui.setPersonaGenStatus("Generating with Google Gemini..."); 
+                    try {
+                        const prompt = `Generate a detailed persona profile for a dialogue simulation. This person's primary goal is: "${goal}". Their personality archetype is: "${archetype}". Describe their background, communication style, and what they are likely to say or do in a conversation related to their goal.`;
+                        const generatedText = await app.api.callLLM(app.dom.googleApiKeyInput.value.trim(), [{ role: 'user', parts: [{ text: prompt }] }]);
+                        app.dom.persona.profileText.value = generatedText; 
+                        app.ui.setPersonaGenStatus("Success!", true);
+                    } catch (e) {
+                         app.ui.renderMessage(e.message, 'System', 'error'); 
+                         app.ui.setPersonaGenStatus(`Error: ${e.message}`, false);
+                    }
+                }
+                app.ui.setLoadingState(false);
+                app.ui.updateLlmSelector();
+            }, 
+            async startInteractive() { 
+                if (!app.dom.persona.profileText.value) { return alert("Please generate a persona profile first!"); } 
+                app.state.consultationEnded = false; 
+                app.ui.closePanel(); 
+                app.ui.clearChat(); 
+                app.ui.setControlState('interactive'); 
+                app.dom.feedbackBtn.disabled = true; 
+                app.ui.setLoadingState(true); 
+                try { 
+                    let openingLine;
+                    if (app.dom.persona.llmSelect.value === 'local-ai') {
+                        openingLine = this.varyTemplate('openingLine', true);
+                    } else {
+                        const context = app.dom.contextInput.value;
+                        const profile = app.dom.persona.profileText.value;
+                        const prompt = `You are role-playing as a person with this profile: "${profile}". The setting is: "${context}". What is the very first thing you say to start the conversation? Be concise and dense, getting straight to the point in 1-2 sentences.`;
+                        openingLine = await app.api.callLLM(app.dom.googleApiKeyInput.value.trim(), [{ role: 'user', parts: [{ text: prompt }] }]);
+                    }
+                    app.state.conversationHistory.push({ author: 'Persona', text: openingLine });
+                    const messageEl = app.ui.renderMessage(openingLine, 'Persona', 'Persona', app.state.conversationHistory.length - 1);
+                    this.addRewriteButtonToMessage(messageEl);
+                    await this.speak(openingLine, 'persona');
+                } catch (e) { 
+                    app.ui.renderMessage(e.message, "System", "error"); 
+                } finally {
+                    app.ui.setLoadingState(false); 
+                }
+            },
+            varyTemplate(type, isInitialGeneration = false) {
+                const goal = app.dom.personaGoalInput.value.trim();
+                const archetype = app.dom.personaArchetypeInput.value.trim();
+                if (!goal || !archetype) {
+                    alert("Please provide the persona's Goal and Personality before generating from a template.");
+                    return;
+                }
+                let newText = "";
+                if (type === 'profile') {
+                    const profiles = [
+                        `Background: This person is known for being ${archetype}. They have a history of prioritizing their main objective, which is currently to ${goal}.\nCommunication Style: They speak directly and don't waste time with small talk. Expect them to challenge assumptions and ask for concrete evidence.\nBehavioral Tendencies: As someone who is ${archetype}, they will likely seem guarded at first.`,
+                        `Background: A generally ${archetype} individual who is currently focused on one thing: to ${goal}.\nCommunication Style: Their way of speaking is measured and thoughtful. They listen more than they speak, but when they do, it's with purpose.\nBehavioral Tendencies: Their ${archetype} nature means they will approach the conversation with caution, seeking to understand all angles before committing.`
+                    ];
+                    newText = profiles[Math.floor(Math.random() * profiles.length)].replace(/\$\{goal\}/g, goal).replace(/\$\{archetype\}/g, archetype);
+                    app.dom.persona.profileText.value = newText;
+                    if(isInitialGeneration) {
+                        app.ui.setPersonaGenStatus("Generated from local template", true);
+                    }
+                } else if (type === 'openingLine') {
+                    const openingLines = ["Thanks for meeting with me. Let's get right to it.", "Okay, I'm here. What did you want to discuss?", "I'm glad we could connect. I'm ready to listen."];
+                    newText = openingLines[Math.floor(Math.random() * openingLines.length)];
+                }
+                return newText;
+            },
+            addRewriteButtonToMessage(messageEl) {
+                if(app.tour.isActive) return;
+                const rewriteBtn = document.createElement('button');
+                rewriteBtn.className = 'rewrite-btn';
+                rewriteBtn.innerHTML = '🎲';
+                rewriteBtn.title = 'Rewrite with Local AI';
+                rewriteBtn.onclick = () => this.rewriteTextElement(rewriteBtn, messageEl);
+                messageEl.appendChild(rewriteBtn);
+            },
+            async rewriteTextElement(buttonEl, target) {
+                buttonEl.disabled = true;
+                buttonEl.innerHTML = '<div class="loader"></div>';
+
+                const isTextarea = target.nodeName === 'TEXTAREA';
+                app.ui.setPersonaGenStatus("Paraphrasing with Local AI...");
+                
+                let pElement = isTextarea ? null : target.querySelector('p');
+                let originalText = isTextarea ? target.value : (pElement ? pElement.innerText : '');
+                let messageIndex = isTextarea ? -1 : parseInt(target.dataset.index, 10);
+
+                if (!originalText || !originalText.trim()) {
+                    buttonEl.disabled = false; buttonEl.innerHTML = '🎲'; return;
+                }
+                try {
+                    const pipe = await this.getLocalModel();
+                    const paragraphs = originalText.split('\n').filter(p => p.trim() !== '');
+                    let rewrittenParagraphs = [];
+
+                    for (const p of paragraphs) {
+                        if (!p) continue;
+                        const prompt = `Paraphrase the following text: "${p}"`;
+                        const output = await pipe(prompt, { max_new_tokens: 256, temperature: 0.7, do_sample: true });
+                        rewrittenParagraphs.push((output[0].generated_text || p).trim());
+                    }
+                    
+                    const newText = rewrittenParagraphs.join('\n');
+                    app.ui.setPersonaGenStatus("Paraphrased with Local AI", true);
+                    
+                    if (isTextarea) {
+                        target.value = newText;
+                    } else if (pElement && messageIndex > -1) {
+                        pElement.innerText = newText;
+                        if (app.state.conversationHistory[messageIndex]) {
+                            app.state.conversationHistory[messageIndex].text = newText;
+                        }
+                        await this.speak(newText, 'persona');
+                    }
+                } catch(e) {
+                    app.ui.renderMessage(`Rewrite Error: ${e.message}`, "System", "error");
+                    if (isTextarea) target.value = originalText;
+                    else if (pElement) pElement.innerText = originalText;
+                } finally {
+                    buttonEl.disabled = false;
+                    buttonEl.innerHTML = '🎲';
+                }
+            },
+            async _getPersonaResponse() {
+                app.ui.setLoadingState(true); 
+                try { 
+                    const historyText = app.state.conversationHistory.map(m => `${m.author === 'User' ? 'You' : 'Them'}: ${m.text}`).join('\n');
+                    const profile = app.dom.persona.profileText.value;
+                    const prompt = `You are role-playing as a person with this profile: "${profile}". Continue the conversation based on this history:\n\n${historyText}\n\nWhat is your next line? Be natural and stay in character. Keep your response concise and dense, focusing on the core of the message in 1-2 sentences.`;
+                    const responseText = await app.api.callLLM(app.dom.googleApiKeyInput.value.trim(), [{ role: 'user', parts: [{ text: prompt }] }]);
+                    app.state.conversationHistory.push({ author: 'Persona', text: responseText });
+                    const messageEl = app.ui.renderMessage(responseText, 'Persona', 'Persona', app.state.conversationHistory.length - 1);
+                    this.addRewriteButtonToMessage(messageEl);
+                    await this.speak(responseText, 'persona'); 
+                } catch (e) { 
+                    console.error("Error getting persona response:", e);
+                    app.ui.renderMessage(e.message, "System", "error"); 
+                } finally {
+                    app.ui.setLoadingState(false); 
+                }
+            },
+            sendUserMessage() { 
+                const text = app.dom.userInput.value.trim(); 
+                if (!text || app.state.isSimulationRunning) return; 
+                
+                app.ui.renderMessage(text, 'You', 'User');
+                app.state.conversationHistory.push({ author: 'User', text });
+                app.dom.userInput.value = '';
+                app.dom.feedbackBtn.disabled = app.state.conversationHistory.filter(m => m.author === 'User').length < 1;
+                
+                if (app.dom.persona.llmSelect.value === 'local-ai') {
+                    if (!app.state.consultationEnded) {
+                        app.ui.renderMessage("Practice Mode: The persona will not respond. Continue typing your dialogue or request feedback.", "System", "system");
+                        app.state.consultationEnded = true;
+                    }
+                    return;
+                }
+                
+                this._getPersonaResponse();
+            },
+            async getSuggestedResponse() {
+                if (app.state.isSimulationRunning) return;
+                app.ui.setLoadingState(true);
+                try {
+                    const historyText = app.state.conversationHistory.map(m => `${m.author === 'User' ? 'You' : 'Them'}: ${m.text}`).join('\n');
+                    const profile = app.dom.persona.profileText.value;
+                    const prompt = `You are an expert communication coach. The person you're talking to has this profile: "${profile}". Based on the conversation history below, suggest a concise and effective next line for "You" to say.\n\n${historyText}\n\nSuggested line for "You":`;
+                    const responseText = await app.api.callLLM(app.dom.googleApiKeyInput.value.trim(), [{ role: 'user', parts: [{ text: prompt }] }]);
+                    app.dom.userInput.value = responseText.replace(/\"/g, ''); // Remove quotes
+                    app.dom.userInput.focus();
+                } catch(e) {
+                    console.error("Error getting suggested response:", e);
+                    app.ui.renderMessage(e.message, "System", "error"); 
+                } finally {
+                    app.ui.setLoadingState(false);
+                }
+            },
+            speak(text, role) {
+                return new Promise((resolve) => {
+                    if (!app.state.audioEnabled || !text || (app.tour.isActive && app.tour.isPaused)) {
+                        return resolve();
+                    }
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    let selectedVoice = null;
+                    if (role === 'narrator') {
+                        selectedVoice = app.state.demoVoices.narrator;
+                    } else {
+                        let targetVoice = null;
+                        if(app.tour.isActive){
+                            targetVoice = (role === 'persona') ? app.state.demoVoices.persona : app.state.demoVoices.user;
+                        } else {
+                            const voiceSelect = (role === 'persona') ? app.dom.persona.voiceSelect : app.dom.user.voiceSelect;
+                            selectedVoice = app.state.voices.find(v => v.voiceURI === voiceSelect.value);
+                        }
+                        if (targetVoice) selectedVoice = targetVoice;
+                    }
+
+                    if (selectedVoice) {
+                        utterance.voice = selectedVoice;
+                        utterance.lang = selectedVoice.lang;
+                    } else {
+                        console.warn(`[Voice] No specific voice found for role: ${role}. Using default.`);
+                    }
+
+                    utterance.onend = () => resolve();
+                    utterance.onerror = (e) => {
+                        console.error("[Voice] SpeechSynthesisUtterance.onerror", e);
+                        resolve();
+                    };
+                    window.speechSynthesis.cancel();
+                    window.speechSynthesis.speak(utterance);
+                });
+            }, 
+            async analyze() { 
+                if (app.tour.isActive || app.dom.demoModeToggle.checked) {
+                    app.ui.renderAnalysisReport(app.demoData.analysis.reportText, app.demoData.analysis.dashboardData);
+                    return;
+                }
+                app.dom.feedbackBtn.disabled = true;
+                if (app.state.conversationHistory.length < 1) return;
+                app.ui.setLoadingState(true);
+                app.ui.updateSimulationStatus("Analyzing conversation...");
+                try {
+                    const historyText = app.state.conversationHistory.map(m => `${m.author === 'User' ? 'User' : 'Persona'}: ${m.text}`).join('\n');
+                    const prompt = `Analyze the following conversation from the User's perspective. The Persona's profile is: "${app.dom.persona.profileText.value}". The conversation was:\n\n${historyText}\n\nProvide feedback on the user's communication skills. Evaluate their clarity, empathy, assertiveness, and strategy. Structure the feedback with "### Strengths" and "### Areas for Improvement" sections.`;
+                    const report = await app.api.callLLM(app.dom.googleApiKeyInput.value.trim(), [{ role: 'user', parts: [{ text: prompt }] }]);
+                    app.ui.renderAnalysisReport(report, app.demoData.analysis.dashboardData);
+                } catch (e) {
+                    app.ui.renderMessage(e.message, "System", "error");
+                } finally {
+                    app.ui.setLoadingState(false);
+                }
+            }, 
+            populateVoices() {
+                return new Promise(resolve => {
+                    const load = () => {
+                        const voices = window.speechSynthesis.getVoices();
+                        if (voices.length > 0) {
+                            app.state.voices = voices;
+                            [app.dom.persona.voiceSelect, app.dom.user.voiceSelect].forEach(select => {
+                                select.innerHTML = '';
+                                app.state.voices.filter(v => v.lang.startsWith('en')).forEach(v => {
+                                    const option = document.createElement('option');
+                                    option.textContent = `${v.name} (${v.lang})`;
+                                    option.value = v.voiceURI;
+                                    select.appendChild(option);
+                                });
+                            });
+                            resolve();
+                            return true;
+                        }
+                        return false;
+                    };
+                    if (!load()) {
+                        window.speechSynthesis.onvoiceschanged = () => { if (load()) { window.speechSynthesis.onvoiceschanged = null; } };
+                        setTimeout(() => { if(load()) window.speechSynthesis.onvoiceschanged = null; }, 500);
+                    }
+                });
+            }, 
+            findDemoVoices() {
+                const englishVoices = app.state.voices.filter(v => v.lang.startsWith('en'));
+                if (englishVoices.length === 0) { console.warn("[Tour] No English voices found for demo."); return; }
+
+                app.state.demoVoices.narrator = 
+                    englishVoices.find(v => /female/i.test(v.name.toLowerCase()) && /zira|susan|catherine/i.test(v.name.toLowerCase())) ||
+                    englishVoices.find(v => /female/i.test(v.name.toLowerCase())) ||
+                    englishVoices[0];
+                
+                const maleVoices = englishVoices.filter(v => /male|david|mark|daniel|oliver/i.test(v.name.toLowerCase()));
+                if (maleVoices.length > 0) {
+                    app.state.demoVoices.persona = maleVoices.find(v => v.lang.toLowerCase().includes('gb')) || maleVoices[0];
+                    app.state.demoVoices.user = englishVoices.find(v => v.name !== app.state.demoVoices.persona.name) || englishVoices[0];
+                } else { 
+                    app.state.demoVoices.persona = englishVoices[0];
+                    app.state.demoVoices.user = englishVoices[1] || englishVoices[0];
+                }
+
+                if (app.state.demoVoices.user && app.state.demoVoices.persona && app.state.demoVoices.user.name === app.state.demoVoices.persona.name) {
+                    app.state.demoVoices.user = englishVoices.find(v => v.name !== app.state.demoVoices.persona.name) || englishVoices[1] || englishVoices[0];
+                }
+                console.log(`[Tour Voice] Narrator: ${app.state.demoVoices.narrator ? app.state.demoVoices.narrator.name : 'Not Found'}`);
+                console.log(`[Tour Voice] User (You): ${app.state.demoVoices.user ? app.state.demoVoices.user.name : 'Not Found'}`);
+                console.log(`[Tour Voice] Persona (Them): ${app.state.demoVoices.persona ? app.state.demoVoices.persona.name : 'Not Found'}`);
+            },
+        };
+        
+        app.tour = { 
+            isActive: false, isPaused: false, shouldEnd: false, timerInterval: null,
+            
+            async start() {
+                if (this.isActive) return;
+                console.log("[Tour] Starting demo tour...");
+                this.isActive = true; this.isPaused = false; this.shouldEnd = false;
+                
+                app.dom.demoTimer.style.display = 'block';
+                let elapsedSeconds = 0;
+                this.timerInterval = setInterval(() => {
+                    elapsedSeconds++;
+                    app.dom.demoTimer.textContent = `${elapsedSeconds}s`;
+                }, 1000);
+
+                app.ui.setControlState('tour');
+                app.dom.tourPauseResumeBtn.onclick = () => this.togglePause();
+                app.dom.tourEndBtn.onclick = () => this.end();
+
+                if(!app.state.audioEnabled) app.ui.toggleAudio(); 
+                await app.simulation.populateVoices();
+                app.simulation.findDemoVoices();
+                
+                try {
+                    let stepCounter = 0;
+                    for (const step of app.demoData.tourSteps) {
+                        stepCounter++;
+                        if (this.shouldEnd) throw new Error("Tour ended by user");
+                        await this.checkPause();
+                        console.log(`[Tour Step ${stepCounter}/${app.demoData.tourSteps.length}] Executing: ${step.text || 'Action Step'}`);
+                        
+                        let element = step.selector ? document.querySelector(step.selector) : null;
+                        
+                        if (step.action) await step.action();
+                        
+                        await new Promise(r => setTimeout(r, 600)); 
+                        await this.checkPause();
+
+                        if(element) element.classList.add('highlight-pulse');
+
+                        if (step.text) await app.simulation.speak(step.text, 'narrator');
+
+                        await this.checkPause();
+                        await new Promise(r => setTimeout(r, step.pause || 800));
+                        
+                        if (element) element.classList.remove('highlight-pulse');
+                    }
+                } catch(e) {
+                    if (e.message !== "Tour ended by user") console.error("[Tour] Tour failed with an error:", e);
+                } finally {
+                    console.log("[Tour] Tour finished or was terminated.");
+                    this.end(true);
+                }
+            }, 
+            togglePause() { this.isPaused = !this.isPaused; app.dom.tourPauseResumeBtn.textContent = this.isPaused ? 'Resume' : 'Pause'; if (this.isPaused) { console.log("[Tour] Paused."); window.speechSynthesis.pause(); } else { console.log("[Tour] Resumed."); window.speechSynthesis.resume(); } },
+            async checkPause() { while (this.isPaused && !this.shouldEnd) { await new Promise(r => setTimeout(r, 200)); } },
+            end(resetUI = true) {
+                if(!this.isActive) return;
+                this.shouldEnd = true;
+                this.isActive = false;
+
+                clearInterval(this.timerInterval);
+                app.dom.demoTimer.style.display = 'none';
+
+                window.speechSynthesis.cancel();
+                document.querySelectorAll('.highlight-pulse').forEach(el => el.classList.remove('highlight-pulse'));
+                
+                if (resetUI) {
+                    app.dom.demoModeToggle.checked = false;
+                    app.ui.handleDemoToggle();
+                    app.ui.clearAll();
+                } else {
+                    app.ui.setControlState('initial');
+                }
+            } 
+        };
+        
+        app.storage = {
+            saveTheme(theme) { localStorage.setItem('smz_ConvoCraftTheme', theme); },
+            loadTheme() { const theme = localStorage.getItem('smz_ConvoCraftTheme') || 'teal'; app.ui.setTheme(theme); },
+            saveAudioPref(isEnabled) { localStorage.setItem('smz_ConvoCraftAudio', isEnabled); },
+            loadAudioPref() { const isEnabled = localStorage.getItem('smz_ConvoCraftAudio') === 'true'; if(isEnabled && !app.state.audioEnabled) { app.ui.toggleAudio(); } },
+            saveApiKey() { localStorage.setItem('smz_ConvoCraftApiKey', app.dom.googleApiKeyInput.value); },
+            loadApiKey() { app.dom.googleApiKeyInput.value = localStorage.getItem('smz_ConvoCraftApiKey') || ''; },
+        };
+
+        app.demoData = {
+            scenarioSetup: { goal: 'Resist giving a raise due to budget constraints, but willing to listen to strong arguments.', archetype: 'A fair but data-driven manager', context: `Setting: The manager's office during a scheduled annual performance review.` },
+            demoPersonaProfile: `Background: "Alex Chen" is a department head who is fair and transparent, but currently under pressure to keep costs down. Alex values employees who can justify requests with clear data.\n\nCommunication Style: Alex is professional, calm, and direct. They avoid emotional arguments and prefer to discuss concrete metrics and results.\n\nBehavioral Tendencies: Alex will likely counter a request for a raise by referencing budget limitations. However, a well-prepared argument demonstrating exceptional value could persuade them to advocate for an exception.`,
+            fullDemoConversation: [ { author: 'Persona', text: "Thanks for coming in. Your performance this year has been solid. Anything on your mind to start?" }, { author: 'User', text: "Thank you, Alex. I'd like to discuss my compensation. Based on leading the successful Project Phoenix, I believe a salary increase is warranted." }, { author: 'Persona', text: "Project Phoenix was a huge success. However, the budget for raises is extremely tight this year." }, { author: 'User', text: "I understand the constraints. That's why I've prepared a document showing how Project Phoenix saved our department 15% in costs, far exceeding our goals." }, { author: 'Persona', text: "A 15% saving is impressive. Let me see that document. This is exactly what I need to build a case. I can't promise anything, but I will fight for this. Let's talk numbers." } ],
+            analysis: { 
+                dashboardData: {"dashboard":{"communication_skills":[{"label":"Assertiveness","value":9},{"label":"Clarity of Expression","value":8},{"label":"Active Listening","value":7}],"strategic_approach":[{"label":"Strong Opening","value":9},{"label":"Evidence & Justification","value":10},{"label":"Negotiation","value":8}]}}, 
+                reportText: `### Strengths\n- **Excellent Opening:** You started the conversation confidently and directly, clearly stating your objective without being aggressive. Linking your request to your contributions immediately set a professional tone.\n- **Data-Driven Argument:** Your best move was anticipating the budget objection and countering it with specific, quantified results ("15% cost saving"). This aligns perfectly with the manager's data-driven personality.\n- **Collaborative Framing:** Phrases like "I understand the constraints" show empathy and frame the negotiation as a collaborative problem to solve, rather than a demand.\n\n### Areas for Improvement\n- **Proactive Framing:** You could have opened by briefly summarizing your top 2-3 achievements before stating your request for a raise. This would have strengthened your position even before the negotiation began.\n- **Explore Alternatives:** While your case was strong, be prepared to discuss other forms of compensation (e.g., bonus, additional PTO, training budget) if a salary increase is truly not possible. This shows flexibility.` 
+            },
+            tourSteps: [
+                { action: async () => { const s = app.dom.demoSplashScreen; s.style.display = 'flex'; await new Promise(r=>setTimeout(r,100)); s.style.opacity = 1; app.dom.splashTitle.textContent = "ConvoCraft"; }, text: "Welcome to ConvoCraft.", pause: 1000 },
+                { action: () => { const text = "The training tool to help you master difficult conversations and improve your communication skills in a safe, repeatable environment."; app.dom.splashSubtitle.textContent = text; }, text: "The training tool to help you master difficult conversations and improve your communication skills in a safe, repeatable environment.", pause: 2000 },
+                { action: async () => { const s = app.dom.demoSplashScreen; s.style.opacity = 0; await new Promise(r=>setTimeout(r,500)); s.style.display = 'none'; }, text: "Let's take a quick tour of how to prepare for an important conversation.", pause: 500 },
+                { selector: '#open-settings-btn', text: "Everything starts in the Scenario Configuration panel.", action: async () => { app.ui.openPanel(); }, pause: 500 },
+                { selector: '[data-tab="setup"]', text: "In the Setup tab, you can configure the core modes of the application.", pause: 1200 },
+                { selector: '#tour-api-keys', text: "Right here, you can enter an optional Google Gemini API key. While the app works offline with templates, adding a key unlocks the full simulation with smarter AI responses, and enables the powerful performance feedback feature.", pause: 4000 },
+                { selector: '[data-tab="persona-profile"]', action: async () => { app.ui.forceSwitchTab('persona-profile'); }, text: "Next, in the Persona Profile tab, we define who you'll be talking to.", pause: 800 },
+                { selector: '#tour-persona-goal', text: "We'll define their core goal. Our manager needs to stick to the budget.", action: async () => new Promise(r => app.ui.typeTextEffect(app.dom.personaGoalInput, app.demoData.scenarioSetup.goal, true, r, 30)), pause: 500 },
+                { selector: '#tour-persona-archetype', text: "Then, their personality. Let's say they are fair, but data-driven.", action: async () => new Promise(r => app.ui.typeTextEffect(app.dom.personaArchetypeInput, app.demoData.scenarioSetup.archetype, true, r, 30)), pause: 500 },
+                { selector: '#generate-persona-btn', text: "Now, by clicking 'Generate Persona Profile'...", pause: 1500 },
+                { text: "...the AI creates a detailed profile based on our inputs, like this.", action: async () => { const btn = app.dom.generatePersonaBtn; btn.classList.add('btn-primary:active'); await new Promise(r=>setTimeout(r,150)); btn.classList.remove('btn-primary:active'); await new Promise(r => app.ui.typeTextEffect(app.dom.persona.profileText, app.demoData.demoPersonaProfile, true, r, 10)) } , pause: 2000 },
+                { selector: '#rewrite-profile-btn', text: "You'll also see this dice icon next to generated text. Clicking it uses the built-in Local AI to instantly paraphrase the content, giving you more variety for your scenarios.", pause: 4000 },
+                { selector: '[data-tab="scenario-context"]', action: async () => { app.ui.forceSwitchTab('scenario-context'); }, text: "Finally, in the Scenario Context tab, we set the scene.", pause: 800 },
+                { selector: '#tour-scenario-presets', text: "You can choose from common scenarios like asking for a raise.", pause: 1200 },
+                { selector: '#tour-scenario-context', text: "This defines the environment for the conversation.", action: async () => new Promise(r => app.ui.typeTextEffect(app.dom.contextInput, app.demoData.scenarioSetup.context, true, r, 15)), pause: 800 },
+                { action: async () => { app.ui.closePanel(); }, text: "Configuration is complete. The simulated dialogue will now begin.", pause: 1200 },
+                { action: async () => {
+                    app.ui.clearChat();
+                    await new Promise(r => setTimeout(r, 500));
+                    for (const msg of app.demoData.fullDemoConversation) {
+                        if (app.tour.shouldEnd) return;
+                        await app.tour.checkPause();
+                        await new Promise(r => setTimeout(r, 1500));
+                        app.state.conversationHistory.push(msg);
+                        const authorName = msg.author === 'User' ? 'You' : 'Alex (Manager)';
+                        const messageEl = app.ui.renderMessage(msg.text, authorName, msg.author, app.state.conversationHistory.length - 1);
+                        if (msg.author === 'Persona') app.simulation.addRewriteButtonToMessage(messageEl);
+                        await app.simulation.speak(msg.text, msg.author.toLowerCase());
+                    }
+                }, pause: 1500},
+                { text: "After the conversation, you can request feedback on your performance.", pause: 800 },
+                { action: async () => { if (!app.tour.shouldEnd) await app.simulation.analyze(); }, pause: 4000 },
+                { text: "The feedback identifies strengths and areas for improvement. You've seen the full workflow. You are now ready to practice your own conversations. Good luck!", pause: 4000}
+            ]
+        };
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            app.init();
+        });
+
+        window.app = app;
+    </script>
+</body>
+</html>

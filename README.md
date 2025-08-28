@@ -2,7 +2,7 @@
 
 > Master tough talks with ConvoCraft. Practice any scenario with an AI persona, get instant feedback, and build the confidence to win any conversation. Your personal dialogue gym.
 
-![ConvoCraft Screenshot](https://i.imgur.com/7gZ3Y0q.png)
+![ConvoCraft Screenshot](convocraft-youtube.png)
 <!-- You can replace this URL with a more updated screenshot or GIF -->
 
 ---
